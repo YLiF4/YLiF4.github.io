@@ -1,13 +1,13 @@
 @echo off
 cd /d "%~dp0"
 
-:: 用 PowerShell 隐藏启动 Node
-powershell -WindowStyle Hidden -Command "Start-Process -WindowStyle Hidden -FilePath 'node' -ArgumentList 'scripts\migrate.mjs'" 2>nul
+:: 最小化启动 Node
+start "" /min node scripts\migrate.mjs
 
-:: 等 Node 启动
-timeout /t 2 /nobreak >nul
+:: 等服务器启动
+timeout /t 3 /nobreak >nul
 
-:: 浏览器 (cmd 原生命令, 不受隐藏窗口影响)
-start "" http://localhost:3456
+:: 用 explorer 打开（比 start 更可靠）
+explorer http://localhost:3456
 
 exit
