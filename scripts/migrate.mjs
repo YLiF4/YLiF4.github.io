@@ -21,6 +21,29 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
 const SOURCE_DIR = process.env.SOURCE_DIR || "D:\\OSDisk\\Blog";
 const TARGET_DIR = join(PROJECT_ROOT, "src", "content", "posts");
+const SHUTDOWN_GRACE_MS = Number(process.env.MIGRATE_SHUTDOWN_GRACE_MS || 12000);
+
+let lastHeartbeatAt = 0;
+let shuttingDown = false;
+
+function markPageAlive() {
+  lastHeartbeatAt = Date.now();
+}
+
+function shutdownServer(reason) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`迁移工具正在退出: ${reason}`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
+}
+
+setInterval(() => {
+  if (!lastHeartbeatAt) return;
+  if (Date.now() - lastHeartbeatAt > SHUTDOWN_GRACE_MS) {
+    shutdownServer("浏览器页面已关闭或失去连接");
+  }
+}, 2000).unref();
 
 // ─── 工具函数 ────────────────────────────────────────────
 
@@ -613,7 +636,14 @@ const HTML_PAGE = `<!DOCTYPE html>
 
   async function migrateOne(i) {
     const post = { ...postsData[i] };
+    if (!post.title || !post.slug) {
+      showToast('错误: 标题或 Slug 不能为空', 'error');
+      return;
+    }
     post.tags = post.tags || '';
+    // 显示处理中状态
+    const btn = document.querySelector(\`#card-\${i} .btn-success\`);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 处理中...'; }
     try {
       const res = await fetch('/api/migrate', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -623,21 +653,31 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (result.success) {
         postsData[i]._hasFrontmatter = true;
         postsData[i]._migrated = true;
-        showToast('✓ '+post.title+' '+(post._hasFrontmatter?'更新':'迁移')+'成功', 'success');
+        showToast('✓ '+post.title+' 迁移成功', 'success');
         filterAndSort();
       } else {
-        showToast('失败: '+result.error, 'error');
+        showToast('✗ 迁移失败: '+result.error, 'error');
       }
-    } catch (err) { showToast('请求失败: '+err.message, 'error'); }
+    } catch (err) {
+      console.error('[迁移失败]', post.title, err);
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        showToast('✗ 无法连接服务器，请确认迁移工具正在运行 (http://localhost:3456)', 'error');
+      } else {
+        showToast('✗ 请求失败: '+err.message, 'error');
+      }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = postsData[i]._hasFrontmatter ? '🔄 更新' : '✓ 确认迁移'; }
   }
 
   async function migrateAll() {
     const pending = postsData;
-    if (!pending.length) { showToast('没有文章', 'error'); return; }
+    if (!pending.length) { showToast('没有文章可迁移', 'error'); return; }
     if (!confirm('确认迁移/更新全部 '+pending.length+' 篇文章？')) return;
-    let done = 0;
+    let done = 0, failed = 0;
+    const errors = [];
     for (let i = 0; i < postsData.length; i++) {
       const post = { ...postsData[i] };
+      if (!post.title || !post.slug) { failed++; continue; }
       post.tags = post.tags || '';
       try {
         const res = await fetch('/api/migrate', {
@@ -646,9 +686,16 @@ const HTML_PAGE = `<!DOCTYPE html>
         });
         const r = await res.json();
         if (r.success) { postsData[i]._hasFrontmatter = true; postsData[i]._migrated = true; done++; }
-      } catch (err) { console.error(err); }
+        else { failed++; errors.push(post.sourceFile+': '+r.error); }
+      } catch (err) {
+        failed++;
+        errors.push(post.sourceFile+': '+err.message);
+        console.error('[全部迁移失败]', post.sourceFile, err);
+      }
     }
-    showToast('完成: '+done+' 篇', done>0?'success':'error');
+    const msg = '完成: '+done+'/'+pending.length+' 篇' + (failed>0 ? '，'+failed+' 篇失败' : '');
+    showToast(msg, done>0?'success':'error');
+    if (errors.length) console.error('失败详情:', errors);
     filterAndSort();
   }
 
@@ -659,6 +706,16 @@ const HTML_PAGE = `<!DOCTYPE html>
     document.getElementById('bar-fill').style.width = pct+'%';
     document.getElementById('progress-text').textContent = done+' / '+total;
   }
+
+  function sendHeartbeat() {
+    fetch('/api/ping', { method: 'POST', cache: 'no-store', keepalive: true }).catch(() => {});
+  }
+
+  sendHeartbeat();
+  setInterval(sendHeartbeat, 2000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) sendHeartbeat();
+  });
 
   async function shutdown() {
     try { await fetch('/api/shutdown', { method: 'POST' }); } catch(e) {}
@@ -726,8 +783,17 @@ async function handleRequest(req, res) {
   try {
     // GET /
     if (req.method === "GET" && path === "/") {
+      markPageAlive();
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(HTML_PAGE);
+      return;
+    }
+
+    // POST /api/ping — 页面心跳，用于关闭浏览器后自动停服
+    if ((req.method === "GET" || req.method === "POST") && path === "/api/ping") {
+      markPageAlive();
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ success: true }));
       return;
     }
 
@@ -748,11 +814,14 @@ async function handleRequest(req, res) {
         return;
       }
 
+      console.log(`[迁移] 开始处理: ${post.title} (${post.sourceFile || "unknown"})`);
+
       const markdown = buildMarkdown(post);
 
       // 1. 写回源文件（原地打标记）
       if (post.sourcePath && existsSync(post.sourcePath)) {
         writeFileSync(post.sourcePath, markdown, "utf-8");
+        console.log(`[迁移] 源文件已更新: ${post.sourcePath}`);
       }
 
       // 2. 写入目标目录
@@ -760,6 +829,7 @@ async function handleRequest(req, res) {
       if (!existsSync(TARGET_DIR)) mkdirSync(TARGET_DIR, { recursive: true });
       const targetPath = join(TARGET_DIR, `${post.slug}.md`);
       writeFileSync(targetPath, markdown, "utf-8");
+      console.log(`[迁移] 目标文件已写入: ${targetPath}`);
 
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ success: true, source: post.sourcePath, target: targetPath }));
@@ -770,7 +840,7 @@ async function handleRequest(req, res) {
     if (req.method === "POST" && path === "/api/shutdown") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ success: true, message: "服务已停止" }));
-      server.close(() => process.exit(0));
+      shutdownServer("收到页面关闭请求");
       return;
     }
 
@@ -799,6 +869,7 @@ async function handleRequest(req, res) {
     res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ error: "Not found" }));
   } catch (err) {
+    console.error(`[错误] ${req.method} ${path}:`, err.message);
     res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ success: false, error: err.message }));
   }
@@ -814,17 +885,5 @@ server.listen(PORT, () => {
   目标目录: ${TARGET_DIR}
   🌐  http://localhost:${PORT}
   `);
-  // 自动打开浏览器
-  import("node:child_process").then(({ exec }) => {
-    const url = `http://localhost:${PORT}`;
-    let cmd;
-    if (process.platform === "win32") {
-      cmd = `start "" "${url}"`;
-    } else if (process.platform === "darwin") {
-      cmd = `open "${url}"`;
-    } else {
-      cmd = `xdg-open "${url}"`;
-    }
-    exec(cmd, () => {});
-  });
+  // 浏览器由 .bat 启动脚本负责打开
 });
