@@ -93,25 +93,9 @@ function extractTitle(content) {
   return "";
 }
 
-/** 生成 URL 友好的 slug */
+/** 生成 slug：直接使用文章标题 */
 function generateSlug(title, date) {
-  const ascii = title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  if (ascii.length > 2) {
-    const s = `${date}-${ascii}`;
-    return s.length > 80 ? s.substring(0, 80).replace(/-[^-]*$/, "") : s;
-  }
-  const simplified = title
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9一-鿿-]/gi, "")
-    .substring(0, 40);
-  if (simplified.length > 2) return `${date}-${simplified}`;
-  return `post-${date}`;
+  return title;
 }
 
 /** 格式化日期 */
@@ -385,7 +369,7 @@ const HTML_PAGE = `<!DOCTYPE html>
   .empty-state .icon { font-size: 3em; margin-bottom: 10px; }
 
   .toast {
-    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    position: fixed; bottom: 24px; left: 24px; z-index: 999;
     padding: 10px 20px; border-radius: var(--radius);
     color: #fff; font-weight: 500;
     box-shadow: 0 4px 12px rgba(0,0,0,.2);
@@ -613,9 +597,7 @@ const HTML_PAGE = `<!DOCTYPE html>
   }
 
   function autoSlug(title, date) {
-    const ascii = title.toLowerCase().replace(/[^a-z0-9\\s-]/g,'').trim().replace(/\\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
-    if (ascii.length > 2) { const s = date+'-'+ascii; return s.length>80 ? s.substring(0,80).replace(/-[^-]*$/,'') : s; }
-    return 'post-'+date;
+    return title;
   }
 
   function toggleCard(i) { document.getElementById('card-'+i).classList.toggle('open'); }

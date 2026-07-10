@@ -1,7 +1,7 @@
 # About
-This is the demo site for [Fuwari](https://github.com/saicaca/fuwari).
+YLiF4 from Southeast University.
 
-::github{repo="saicaca/fuwari"}
+::github{repo="YLiF4/YLiF4.github.io"}
 
 > ### Sources of images used in this site
 > - [Unsplash](https://unsplash.com/)
