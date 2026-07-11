@@ -247,13 +247,13 @@ console.log(b); // ReferenceError: b is not defined（let 被块锁住了）
 
 | 场景                           |              推荐方式              | 示例                                                         |
 | :----------------------------- | :--------------------------------: | :----------------------------------------------------------- |
-| **判断基本类型**               |              `typeof`              | `typeof "abc"` → `"string"`；`typeof true` → `"boolean"`     |
-| **判断数组**                   |         `Array.isArray()`          | `Array.isArray([])` → `true`（`typeof []` 只会返回 `"object"`） |
+| **判断基本类型**               |              `typeof`              | `typeof "abc"` → `"string"`；`typeof true` → `"boolean"` （`typeof []`，`typeof null` 只会返回 `"object"`）。 |
+| **判断数组**                   |         `Array.isArray()`          | `Array.isArray([])` → `true`                                 |
 | **判断 null**                  |             `=== null`             | `let x = null; x === null` → `true`（因为 `typeof` 有 Bug）  |
 | **判断某个对象是否属于特定类** |            `instanceof`            | `[] instanceof Array` → `true`；`{} instanceof Object` → `true` |
 | **万能精准判断（原始+引用）**  | `Object.prototype.toString.call()` | `Object.prototype.toString.call(null)` → `"[object Null]"`； `Object.prototype.toString.call([])` → `"[object Array]"` |
 
-> 关于字符串：字符串会检测包围最外面的引号。内部其余的引号都会被认为是字符串的内容。
+JavaScript中有一种特殊的类型 `undefined` ，当一个变量没有被赋值时为这个类型。
 
 #### 原始类型的方法
 
@@ -355,8 +355,8 @@ obj.name = '李四';
 
 #### 对象遍历
 
-- **`for...in` 循环**（会遍历原型链上的可枚举属性，通常需要配合 `hasOwnProperty` 过滤）。
-- **`Object.keys()` / `values()` / `entries()`**（现代推荐，只返回对象**自身**的属性，不涉及原型链）。
+- **`for...in`,`for...of`循环**（会遍历原型链上的可枚举属性，通常需要配合 `hasOwnProperty` 过滤）。其中，前者遍历key，后者遍历value。
+- **`Object.keys()` / `values()` / `entries()`**+**`forEach`**（数组的方法，只返回对象**自身**的属性，不涉及原型链）。
 
 
 ```javascript
@@ -484,6 +484,37 @@ function gcd(x, y) {
 }
 ```
 
+#### 函数声明，函数表达式与函数提升
+
+```js
+console.log(square(5)); // 25
+
+function square(n) {
+    return n * n;
+}
+```
+
+这一段代码可以正确运行，原因是函数square的声明被提升到了作用域的最顶部。
+
+然而，下面这一段代码是错误的：
+
+```js
+console.log(square(5)); // ReferenceError: Cannot access 'square' before initialization
+const square = function (n) {
+    return n * n;
+};
+```
+
+在ES6以后严格模式下禁止在块级作用域下声明函数。
+
+| 场景                                        | 写法示例                           | 提升机制                                  | 块级作用域 (`{}`) 影响         | 能否在定义前调用      | 挂载 `window` (全局) |
+| :------------------------------------------ | :--------------------------------- | :---------------------------------------- | :----------------------------- | :-------------------- | :------------------- |
+| **1. 函数声明**                             | `function a(){}`                   | **整体提升**（函数体一起提）              | 诡异（ES6严格模式禁止）        | ✅ 可以                | ✅ 是                 |
+| **2. `var` + 函数表达式（全局/函数内）**    | `var a = function(){}`             | **变量提升**（`undefined`），赋值留在原地 | 无视 `{}`，穿透到函数/全局     | ❌ 报错（类型错误）    | ✅ 是                 |
+| **3. `var` + 函数表达式（块级 `if` 内）**   | `if(true){ var a = function(){} }` | 变量提升到**外部函数**，赋值留在块内      | **穿透**，污染外部作用域       | ❌ 报错（`undefined`） | ✅ 是                 |
+| **4. `let/const` + 函数表达式（任何位置）** | `let a = function(){}`             | **变量提升但处于 TDZ**，赋值留在原地      | **严格隔离**，只在 `{}` 内有效 | ❌ 报错（引用错误）    | ❌ 否                 |
+| **5. 箭头函数 + `const`**                   | `const a = () => {}`               | 同 `let/const`（TDZ）                     | **严格隔离**                   | ❌ 报错                | ❌ 否                 |
+
 #### 箭头函数 `=>`
 
 箭头函数提供了极致的简写模式，有 3 个记忆点：
@@ -507,6 +538,43 @@ const add3 = (a, b) => a + b;
 const double = x => x * 2;
 // 如果返回的是对象字面量，必须加括号包起来（否则 {} 会被误认为函数体）
 const getObj = id => ({ id: id, name: 'test' });
+```
+
+总结函数的使用：
+
+1. 彻底禁用 `var`
+
+- **原因**：它带来的“穿透块级作用域”和“变量提升”好处极少，坏处极大。
+- **替代**：全部替换为 `const`（默认）和 `let`（仅在需要重新赋值时）。
+
+2. 函数定义一律采用表达式（赋值给变量），坚决不用声明
+
+- **为什么？** 函数声明虽然整体提升，但它在 `if` 里的表现极其混乱。为了保证代码的**阅读顺序 == 执行顺序**，我们强制“先声明，后调用”。
+- **写法**：`const fn = function() {};` 或 `const fn = () => {};`
+
+3. 箭头函数优先（首选）
+
+- 如果你不需要动态 `this`（大多数情况都不需要），直接无脑用 `const fn = () => {}`。
+- 它没有 `this` 绑定困扰（继承外层），代码更简洁。
+
+4. 代码组织规范（把规则锁死）
+
+```javascript
+// ✅ 正确的现代写法（严格遵循块级作用域）
+function test() {
+    // 1. 所有函数定义集中写在顶部（避免 TDZ 报错）
+    const doA = () => { console.log('A'); };
+    const doB = function() { console.log('B'); }; // 普通函数表达式也行
+
+    // 2. 业务逻辑中调用
+    if (true) {
+        doA(); // 正常工作
+        // 即使在这里重新定义 doA，也只影响块内（因为用的是 const）
+        const doA = () => { console.log('内部 A'); }; 
+        doA(); // 输出 "内部 A"
+    }
+    doA(); // 输出 "A"（没有被块内的污染，完美！）
+}
 ```
 
 #### `this` 指针
@@ -574,6 +642,58 @@ const getObj = id => ({ id: id, name: 'test' });
    };
    obj.greetLater();
    ```
+
+#### arguments对象与剩余参数
+
+函数的实际参数会被保存在一个类似数组的 arguments 对象中。在函数内，你可以通过`arguments[i]`找出传入的参数：
+
+其中 `i` 是参数的序号，从 `0` 开始。所以第一个传入函数的参数会是 `arguments[0]`。参数的数量由 `arguments.length` 表示。
+
+使用 `arguments` 对象，你可以处理比声明更多的参数来调用函数。这在你事先不知道会需要将多少参数传递给函数时十分有用。你可以用 `arguments.length` 来获得实际传递给函数的参数的数量，然后用 `arguments` 对象来访问每个参数。
+
+例如，考虑有一个用来连接字符串的函数。唯一正式的参数是在连接后的字符串中用来分隔各个连接部分的字符。该函数定义如下：
+
+
+```js
+function myConcat(separator) {
+  let result = ""; // 初始化列表
+  // 迭代 arguments
+  for (let i = 1; i < arguments.length; i++) {
+    result += arguments[i] + separator;
+  }
+  return result;
+}
+```
+
+你可以给这个函数传递任意数量的参数，它会将各个参数连接成一个字符串“列表”：
+
+
+```js
+console.log(myConcat("、", "红", "橙", "蓝"));
+// "红、橙、蓝、"
+
+console.log(myConcat("；", "大象", "长颈鹿", "狮子", "猎豹"));
+// "大象；长颈鹿；狮子；猎豹；"
+
+console.log(myConcat("。", "智者", "罗勒", "牛至", "胡椒", "香菜"));
+// "智者。罗勒。牛至。胡椒。香菜。"
+```
+
+**备注：**`arguments` 变量只是“类数组”，而不是数组。它与数组类似，有索引编号和 `length` 属性。尽管如此，它**并不具备** Array 对象的所有数组操作方法。
+
+JavaScript中允许使用[剩余参数](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Functions/rest_parameters)将不确定数量的参数表示为数组。
+
+在下面的示例中，`multiply` 函数使用剩余参数收集从第二个参数开始到最后的参数。然后，该函数将它们与第一个参数相乘。
+
+```js
+function multiply(multiplier, ...theArgs) {
+    return theArgs.map((x) => multiplier * x);
+}
+
+const arr = multiply(2, 1, 2, 3);
+console.log(arr); // [2, 4, 6]
+```
+
 
 
 ### JavaScript作用域
@@ -665,6 +785,8 @@ fn(); // 输出 2
 ```
 
 这里 `createCounter()` 返回了一个函数 `inner()` 。正常来讲，`count` 应该被销毁。但是由于 `fn=inner()` 还保有对 `count` 的引用，因此垃圾回收器GC不会销毁这一段内存。
+
+> **注意不要重名**：如果一个闭包的函数定义了一个和外部的某个变量名称相同的变量，那么这个闭包将无法引用外部作用域中的这个变量。（内部作用域的变量“覆盖”外部作用域，直至程序退出内部作用域。可以将其视作[命名冲突](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Guide/Functions#命名冲突)。）
 
 #### 有关全局变量
 
@@ -829,3 +951,156 @@ JavaScript 中的模板字符串是一种方便的字符串语法，允许你在
    当你写下 ``` myTag`1${a}2${b}3` ``` 时，底层等价于执行：
    ```myTag( ['1', '2', '3'], a_val, b_val )```
    因为函数定义中使用了 `...values`，所以传入的 `a_val, b_val` 会被自动收集为 `values = [a_val, b_val]`。
+
+### JavaScript的异常处理
+
+与C++几乎一样：
+
+```javascript
+function divide(a, b) {
+    try {
+        if (b === 0) {
+            throw new Error("除数不能为零！");
+        }
+        return a / b;
+    } catch (error) {
+        console.error("捕获到错误:", error.message);
+    } finally {
+        console.log("divide 调用结束");
+    }
+}
+
+console.log(divide(10, 2)); // 5
+console.log(divide(10, 0)); // 捕获错误，返回 undefined
+```
+
+注意JavaScript有一个特殊的语句 `finally` ，这个无论前面是否捕获到异常都会执行。原因是 JavaScript没有析构函数，因此需要手动清理。
+
+如果 `finally` 块返回一个值，该值会是整个 `try…catch…finally` 流程的返回值，不管在 `try` 和 `catch` 块中的 `return` 语句返回了什么：
+
+```javascript
+function f() {
+    try {
+        console.log(0);
+        throw "bogus";
+    } catch (e) {
+        console.log(1);
+        // 这个 return 语句会被挂起直到 finally 块结束
+        return true;
+        console.log(2); // 不可达
+    } finally {
+        console.log(3);
+        return false; // 覆盖前面的“return”
+        console.log(4); // 不可达
+    }
+    // 现在执行“return false”
+    console.log(5); // 不可达
+}
+console.log(f()); // 0、1、3、false
+```
+
+`finally` 块也可以用于重新抛出异常。
+
+**有关于 `Error` 对象：**
+
+根据错误类型，你也许可以用 `name` 和 `message` 属性获取更精炼的信息。
+
+`name` 属性提供了常规的 `Error` 类（如 `DOMException` 或 `Error`），而 `message` 通常提供的信息比将错误对象转换成字符串得到的信息更简明。
+
+在抛出自定义异常时，为了充分利用那些属性（比如 `catch` 块不能分辨是自定义异常还是系统异常时），你可以使用 `Error` 构造函数。
+
+### JavaScript的Number对象与Math对象
+
+与 String 一样，JavaScript会自动给数字创建 Number 对象。
+
+Number 对象具有许多方法。其中之一是大量的静态常量：
+
+| 属性                                                         | 描述                                                         |      |
+| :----------------------------------------------------------- | :----------------------------------------------------------- | :--- |
+| [`Number.MAX_VALUE`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_VALUE) | 可表示的最大正数（`1.7976931348623157e+308`）                |      |
+| [`Number.MIN_VALUE`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/MIN_VALUE) | 可表示的最小正数（`5e-324`）                                 |      |
+| [`Number.NaN`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/NaN) | 特殊值“非数值”                                               |      |
+| [`Number.NEGATIVE_INFINITY`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/NEGATIVE_INFINITY) | 特殊值“负无穷”；在溢出时返回                                 |      |
+| [`Number.POSITIVE_INFINITY`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/POSITIVE_INFINITY) | 特殊值“正无穷”；在溢出时返回                                 |      |
+| [`Number.EPSILON`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON) | `1` 与能够表示为 [`Number`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number) 的最小大于 `1` 的值之间的差值（`2.220446049250313e-16`） |      |
+
+以及一些静态方法：
+
+| 方法                                                         | 描述                                                         |
+| :----------------------------------------------------------- | :----------------------------------------------------------- |
+| [`Number.parseFloat()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/parseFloat) | 把字符串参数解析成浮点数，和全局方法 [`parseFloat()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/parseFloat) 作用一致。 |
+| [`Number.parseInt()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/parseInt) | 把字符串解析成特定基数对应的整型数值，和全局方法 [`parseInt()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/parseInt) 作用一致。 |
+| [`Number.isFinite()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/isFinite) | 判断传递的值是否为有限数值。                                 |
+| [`Number.isInteger()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/isInteger) | 判断传递的值是否为整数。                                     |
+| [`Number.isNaN()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/isNaN) | 判断传递的值是否为 [`NaN`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/NaN)。比原始全局函数 [`isNaN()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/isNaN) 更稳健（因为只有数字可以用）。 |
+| [`Number.isSafeInteger()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Number/isSafeInteger) | 判断传递的值是否为*安全整数*。                               |
+
+> 有关浮点数精度：为什么 `0.1 + 0.2 !== 0.3`？
+> 因为 JS 使用 **IEEE 754 双精度浮点数**，二进制无法精确表示 `0.1`，所以计算结果是 `0.30000000000000004`。
+>
+> 解决方法主要有以下三种：
+>
+> 1. **方法一：`toFixed` 截断（展示时）**
+>
+>    ```js
+>    (0.1 + 0.2).toFixed(2) === "0.30"; // 适合显示给用户
+>    ```
+>
+>    2. **方法二：`Number.EPSILON` 容差比较（逻辑判断时）**
+>
+>    ```js
+>   function isEqual(a, b) {
+>        return Math.abs(a - b) < Number.EPSILON; // 极小容差
+>    }
+>    console.log(isEqual(0.1 + 0.2, 0.3)); // true
+>    ```
+> 
+> 3. **方法三：转整数计算（金融敏感场景）**
+>
+>       ```js
+>      // 将 0.1 和 0.2 乘以 10 变成整数 1 和 2，算完再除 10
+>    (0.1 * 10 + 0.2 * 10) / 10 === 0.3; // true
+>   ```
+
+JavaScript有 Math 对象，提供了一些数学函数。与许多其他对象不同，你永远不会自己创建一个 `Math` 对象，而应总是使用内置的 `Math` 对象。
+
+| 方法名                                                       | 描述                                                         |
+| :----------------------------------------------------------- | :----------------------------------------------------------- |
+| [`abs()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/abs) | 绝对值                                                       |
+| [`sin()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/sin)、[`cos()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/cos)、[`tan()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/tan) | 标准三角函数。接受弧度制参数。                               |
+| [`asin()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/asin)、[`acos()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/acos)、[`atan()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/atan)、[`atan2()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/atan2) | 反三角函数。返回弧度制值。                                   |
+| [`sinh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/sinh)、[`cosh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/cosh)、[`tanh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/tanh) | 双曲函数。接受双曲角度。                                     |
+| [`asinh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/asinh)、[`acosh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/acosh)、[`atanh()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/atanh) | 反双曲函数。返回双曲角度值。                                 |
+| [`pow()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/pow)、[`exp()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/exp)、[`expm1()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/expm1)、[`log()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/log)、[`log10()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/log10)、[`log1p()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/log1p)、[`log2()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/log2) | 指数与对数函数。                                             |
+| [`floor()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/floor)、[`ceil()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil) | 返回小于或等于给定参数的最大/最小整数。                      |
+| [`min()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/min)、[`max()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/max) | 返回以逗号分隔的数字列表作为参数时的最小值或最大值（分别）。 |
+| [`random()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/random) | 返回 0 到 1 之间的随机数。                                   |
+| [`round()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/round)、[`fround()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/fround)、[`trunc()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/trunc) | 舍入和截断函数。                                             |
+| [`sqrt()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/sqrt)、[`cbrt()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/cbrt)、[`hypot()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/hypot) | 平方根、立方根、平方和的平方根。                             |
+| [`sign()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/sign) | 数字的符号，用于表示该数字是正数、负数还是零。               |
+| [`clz32()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/clz32)、 [`imul()`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Math/imul) | 32 位二进制表示中的前导零位数。 两个参数按 C 语言风格进行 32 位乘法运算后的结果。 |
+
+### Date对象
+
+不好。
+
+## 五、JavaScript HTML DOM
+
+具体而言，HTML DOM就是指 html 中不同的块。他们带有不同的标签，且彼此通过嵌套关系形成了树形结构。借助这个结构，JavaScript可以方便的操作具体的块。
+
+### 查找 html 元素
+
+主要有几种方法：
+
+1. 根据标签匹配：
+
+   | 元素     | Tag                               | Class                                 | iD                         |
+   | -------- | --------------------------------- | ------------------------------------- | :------------------------- |
+   | **`document`方法** | **`getElementsByTagName('div')`** | **`getElementsByClassName('class')`** | **`getElementById('id')`** |
+   | **唯一性** | **不唯一**（页面有无数个 `<div>`） | **不唯一**（多个元素可以共用同一个类） | **必须唯一**（同一个页面只能出现一次） |
+   | **命名规则** | 固定的 HTML 标准词（`div`、`p`、`span`） | 你自己起名（`red`、`active`、`title`） | 你自己起名（`header`、`main-container`） |
+   | **JS 返回类型** | `HTMLCollection`（多个） | `HTMLCollection` 或 `NodeList` | **单个元素** |
+   | **JS 查找效率** | 较慢（要扫描整棵树找所有同名标签） | 中等（扫描所有标签过滤类名） | **最快**（直接通过哈希表定位，瞬间命中） |
+
+   
+
