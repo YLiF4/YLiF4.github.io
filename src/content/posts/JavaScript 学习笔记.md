@@ -673,3 +673,159 @@ fn(); // 输出 2
 1. 只有用 `var` 和 `function` 在全局声明的变量，以及未声明直接赋值的变量（非严格模式），才会成为 `window` 的属性。
 2. 用 `let` 和 `const` 在全局声明的变量，虽然属于全局作用域，但并不挂载到 `window` 对象上。
 3. 函数内部用 `var`/`let`/`const` 声明的变量是局部变量，`window` 永远无法访问。
+
+## 四、JavaScript的各种功能
+
+### JavaScript字符串与模板字符串
+
+我们首先明确：字符串一旦被创建就**不可更改**，所有操作都是**返回一个新的字符串**。
+
+创建时永远**只用字面量**，不要用 `new String()` 。
+
+String常用的方法主要分为四类：
+
+1. 属性类：一些关于字符串的信息。
+
+   - `str.length` ：获取字符串长度。
+   - `str.at(index)` ：支持负数的 `str[]` ，虽然写起来长一点但更灵活。
+
+2. 查找类：判断存在性与位置。
+
+   - **`str.includes(sub)`**：是否包含子串（返回 `boolean`）。**（最常用）**
+   - **`str.startsWith(sub)` / `str.endsWith(sub)`**：是否以某字符开头/结尾。
+   - **`str.indexOf(sub)` / `str.lastIndexOf(sub)`**：查找第一次/最后一次出现的位置（找不到返回 `-1`）。注意它区分大小写。
+   - **`str.search(/regex/)`**：支持正则查找位置。
+
+3. 编辑类：清洗与转换。
+
+   - **`str.trim()`**：去除两端空白。**（极高频，用于表单输入清洗）**
+     - 变体：`trimStart()` / `trimEnd()`（ES10+）。
+   - **`str.toUpperCase()` / `str.toLowerCase()`**：大小写转换。
+   - **`str.replace(search, replacement)`**：替换。**（注意大坑：默认只替换第一个！）**
+     - **`str.replaceAll(search, replacement)`**（ES2021+）：替换全部。
+     - 如果要按正则全局替换：`str.replace(/ /g, '_')`。
+
+4. 操作类：截取，分割，补全。
+
+   - **`str.slice(start, end)`**：截取区间 `[start, end)`。**（最推荐，支持负数索引）**
+
+     - 例：`"hello".slice(1, 3)` -> `"el"`；`"hello".slice(-2)` -> `"lo"`（从倒数第2个取到末尾）。**不建议用 `substring` 。**
+
+   - **`str.split(separator)`**：将字符串拆成数组。**（与数组 `join` 是黄金搭档）**
+
+     - 例：`"a,b,c".split(",")` -> `['a','b','c']`。
+
+     ```javascript
+     // 经典去重/反转字符串：先拆成数组，处理完再拼回去
+     const str = "hello";
+     const reversed = str.split('').reverse().join(''); // "olleh"
+     ```
+
+   - **`str.padStart(targetLen, padStr)` / `str.padEnd(...)`**：用于补齐位数（如显示时间戳、编号）。
+
+     ```javascript
+     let id = 5;
+     console.log(String(id).padStart(3, '0')); // "005"（常用于生成序号）
+     ```
+
+
+当我们要拼接字符串时，不推荐使用 `+` 。作为替代，我们推荐使用**模板字符串**。
+
+JavaScript 中的模板字符串是一种方便的字符串语法，允许你在字符串中嵌入表达式和变量。
+
+模板字符串使用反引号 ` `` ` 作为字符串的定界符分隔的字面量。
+
+模板字面量是用反引号 \` 分隔的字面量，允许多行字符串、带嵌入表达式的字符串插值和一种叫带标签的模板的特殊结构。
+
+模板字符串的主要特性有：
+
+1. 变量插值。
+
+   ```javascript
+   const name = "张三";
+   const age = 25;
+   // ✅ 模板字符串（${} 占位符）
+   const newMsg = `我叫${name}，今年${age}岁。`;
+   console.log(newMsg); // "我叫张三，今年25岁。"
+   ```
+
+   **注意**：`${}` 里面不只是变量，可以放**任何 JavaScript 表达式**（运算、三元判断、函数调用），如：
+
+   ```javascript
+   const price = 100;
+   const tax = 0.06;
+   console.log(`总价：${price * (1 + tax)}`); // "总价：106"
+   console.log(`您${age >= 18 ? '已' : '未'}成年`); // 支持三元运算
+   ```
+
+   **注意：插值部分不可以进行变量声明。因为 `${}` 里只能是值（表达式）而不是语句。**
+
+2. 多行字符串与引号。
+
+   ```javascript
+   const newHtml = `
+   <div>
+     <p>Hello</p>
+   </div>`;
+   console.log(newHtml);
+   ```
+
+   ```javascript
+   let text = `He's often called "Runoob"`; // 单双引号不再需要转义。反引号可用\转义，但是反引号远远没有单双引号常用。
+   ```
+
+3. 标签函数（Tagged Templates）
+
+   标签函数就是给普通函数传入一个模板字符串，此时不再需要打小括号，而是用反引号。比如：
+
+   ```javascript
+   function myTag(strings, ...values) {
+       console.log('纯文本片段:', strings); // 输出一个数组 ['姓名：', '，年龄：', '。']
+       console.log('插值变量:', values);    // 输出一个数组 ['张三', 25]
+   }
+   
+   const name = '张三';
+   const age = 25;
+   myTag`姓名：${name}，年龄：${age}。`; 
+   // 注意：这里没有括号 ()，而是直接跟反引号！
+   ```
+   对这一段代码的解释：
+   
+   **1. 拆解的“时机”（执行顺序）**
+   
+   当 JS 引擎执行 ```myTag`你好${name}` `` 时，底层严格遵循以下顺序：
+   
+   - **第一步（先计算）**：立即计算所有 `${}` 内部的表达式（如变量取值、函数调用）。这意味着 `values` 数组在进入函数体之前就已经是“最终计算结果”了。
+   - **第二步（后切割）**：将模板字符串按 `${}` 切割成纯文本数组。
+   - **第三步（最后调用）**：调用 `myTag` 函数，将上述结果传入。
+   
+   **2. `strings` 的隐藏结构（`raw` 属性）**
+   
+   `strings` 参数**不是**普通数组，它附带一个特殊的 `raw` 属性：
+   
+   - **作为数组**：存储经过转义处理的纯文本片段（如 `\n` 会被视为换行符）。
+   - **`strings.raw` 属性**：存储**原始输入**的纯文本片段（如 `\n` 保留为反斜杠 `\` 和字母 `n`，不做转义）。
+   - *用途*：内置函数 `String.raw` 就是通过读取 `strings.raw` 来还原原始字符串的（常用于处理 Windows 路径，防止反斜杠被转义）。
+
+   **3. `...values` 的长度与索引对应关系**
+   
+   当模板字符串被传入时，它会被拆解成若干个值 ``` str, value1, value2, ...```。
+   
+   `...`（剩余参数）将后续所有零散的插值值“打包”成一个数组 `values`。
+   
+   - **长度规律**：`strings.length === values.length + 1`（因为文本片段总是比插值多 1）。
+   - **索引对应**：
+     - 模板字符串：`"文本0" ${值0} "文本1" ${值1} "文本2"`
+     - `strings`：`["文本0", "文本1", "文本2"]`
+     - `values`：`[值0, 值1]`
+   - **还原公式**：手动拼接时，始终遵循 `strings[i] + values[i]` 的循环，最后补上 `strings[strings.length - 1]`。
+   
+   **4. 只读保护（冻结数组）**
+   
+   JS 引擎传递的 `strings` 数组是**冻结（Frozen）**的。你无法修改 `strings[0]` 的内容（严格模式下会报错，非严格模式下静默失败）。这确保了纯文本片段不会被恶意篡改。
+   
+   **全景图（编译 -> 运行时 -> 传参）**
+   
+   当你写下 ``` myTag`1${a}2${b}3` ``` 时，底层等价于执行：
+   ```myTag( ['1', '2', '3'], a_val, b_val )```
+   因为函数定义中使用了 `...values`，所以传入的 `a_val, b_val` 会被自动收集为 `values = [a_val, b_val]`。
