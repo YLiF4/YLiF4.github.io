@@ -34,6 +34,14 @@
         }
     }
 
+    .wiki-link-broken {
+        @apply text-[var(--primary)] opacity-70;
+        text-decoration: underline wavy;
+        text-decoration-color: rgb(239 68 68 / 0.7);
+        text-underline-offset: 4px;
+        cursor: help;
+    }
+
     code {
         @apply bg-[var(--inline-code-bg)] text-[var(--inline-code-color)] px-1 py-0.5 rounded-md overflow-hidden;
 

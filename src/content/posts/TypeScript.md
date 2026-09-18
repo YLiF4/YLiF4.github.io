@@ -13,9 +13,11 @@ lang: ''
 
 ## TypeScript概述
 
-### TypeScript做了什
+### TypeScript做了什么
 
+弥补了 [[JavaScript]] 太过激进，易出错的缺点。
 
+借助 [[node.js]]，TypeScript 也在除了前端领域外，在人工智能等新兴领域大放异彩。
 
 ### 与JavaScript的区别
 
@@ -228,3 +230,28 @@ interface只用于TS静态检查，运行时会擦除，零开销。而abstract 
 
 ### 模块化编程
 
+TypeScript通过 `import` / `export` 语法实现导入和导出。
+
+具体而言，TS的导入导出具有两种模式：**默认和命名。**
+
+默认导入/导出是指一个文件的“主要部分”，命名导入/导出则是附加的其他功能。默认导入导出使用 `default` 修饰，一个文件只能有一个。
+
+举个例子：
+
+```ts
+// utils.ts
+export const PI = 3.14;
+export function add(a: number, b: number) { return a + b; }
+export interface User { name: string; } // 导出类型
+export default class Logger {
+  log(msg: string) { console.log(msg); }
+}
+```
+
+```ts
+import Mylogger, { PI, add as sum, User } from './utils'; // 类型（User）在运行时会被擦除
+```
+
+这里 `Mylogger` 在 `utils.ts` 中从未出现，他是怎么来的呢？这里本质上指代的是 utils 中的默认导出 `Logger` 。对于默认导出，由于一个文件只能有一个，因此，即使你没有对他命名，编译器也知道你说的是哪个功能。换言之，import的时候可以随意给他命名，这里命名为 Mylogger。
+
+而后面 `{}` 框起来的是命名导出，他们必须一个个列举出来，可以使用 `as` 关键字进行重命名。

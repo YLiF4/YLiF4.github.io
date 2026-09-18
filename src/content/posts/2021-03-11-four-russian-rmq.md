@@ -1,12 +1,13 @@
 ---
-title: "Four-Russian 算法求解 RMQ"
+title: Four-Russian 算法求解 RMQ
 published: 2021-03-11
-description: ''
-image: ''
-tags: [数据结构]
+description: ""
+image: ""
+tags:
+  - 数据结构
 category: 算法
 draft: false
-lang: ''
+lang: ""
 ---
 
 # 普通做法
